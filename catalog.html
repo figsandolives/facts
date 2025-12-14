@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title data-i18n="catalog_title">عرض المنتجات</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Scanner: html5-qrcode (works for QR + many barcodes depending on browser/device).
+       For CODE128 barcode reliability varies by device; if you want 100% barcode scanning
+       I can switch to ZXing-js (heavier but better for CODE128). -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-40 bg-white border-b">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center gap-2">
+      <h1 class="text-xl font-bold" data-i18n="catalog_title">عرض المنتجات</h1>
+
+      <div class="ms-auto flex flex-wrap items-center gap-2">
+        <button id="langToggle" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50">EN</button>
+
+        <input id="search" class="w-64 max-w-full rounded-lg border px-3 py-2 bg-white"
+          data-i18n-ph="search_ph" placeholder="بحث عن منتج..." />
+
+        <select id="filterMain" class="rounded-lg border px-3 py-2 bg-white">
+          <option value="" data-i18n="main_all">القسم الرئيسي (الكل)</option>
+        </select>
+
+        <select id="filterSub" class="rounded-lg border px-3 py-2 bg-white">
+          <option value="" data-i18n="sub_all">القسم الفرعي (الكل)</option>
+        </select>
+
+        <button id="btnClear" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50" data-i18n="clear_filters">
+          إلغاء الفرز
+        </button>
+
+        <button id="btnScan" class="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800" data-i18n="camera_btn">
+          📷 كاميرا
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <div id="status" class="text-sm text-slate-600 mb-4"></div>
+
+    <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"></div>
+  </main>
+
+  <!-- Scanner Modal -->
+  <div id="scanModal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4">
+    <div class="w-full max-w-xl bg-white rounded-2xl overflow-hidden shadow-xl">
+      <div class="p-4 border-b flex items-center">
+        <div class="font-bold" data-i18n="scan_title">مسح باركود المنتج</div>
+        <button id="btnCloseScan" class="ms-auto px-3 py-1 rounded-lg border hover:bg-slate-50" data-i18n="close">إغلاق</button>
+      </div>
+      <div class="p-4">
+        <div id="reader" class="w-full"></div>
+        <p class="text-xs text-slate-500 mt-3" data-i18n="scan_hint">
+          وجّه الكاميرا نحو الباركود، سيتم فتح صفحة المنتج مباشرة
+        </p>
+
+        <div class="mt-3 rounded-xl border bg-slate-50 p-3 text-xs text-slate-600" data-i18n="scan_note">
+          إذا لم يلتقط الباركود بسرعة، زد الإضاءة أو قرّب الكاميرا
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      getFirestore, collection, query, orderBy, onSnapshot, doc, getDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyAcIwwapktH2nxyZczVKFacTrLh1o-EgdM",
+      authDomain: "shakkak-8f90f.firebaseapp.com",
+      databaseURL: "https://shakkak-8f90f-default-rtdb.firebaseio.com",
+      projectId: "shakkak-8f90f",
+      storageBucket: "shakkak-8f90f.firebasestorage.app",
+      messagingSenderId: "1039276785290",
+      appId: "1:1039276785290:web:9523f9e1ddf7db7410f773",
+      measurementId: "G-XFGQ90337E"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ===== i18n =====
+    const dict = {
+      ar: {
+        catalog_title: "عرض المنتجات",
+        search_ph: "بحث عن منتج...",
+        main_all: "القسم الرئيسي (الكل)",
+        sub_all: "القسم الفرعي (الكل)",
+        clear_filters: "إلغاء الفرز",
+        camera_btn: "📷 كاميرا",
+        price: "السعر",
+        currency: "KD",
+        count: "عدد المنتجات",
+        scan_title: "مسح باركود المنتج",
+        scan_hint: "وجّه الكاميرا نحو الباركود، سيتم فتح صفحة المنتج مباشرة",
+        scan_note: "إذا لم يلتقط الباركود بسرعة، زد الإضاءة أو قرّب الكاميرا",
+        close: "إغلاق",
+        not_found: "المنتج غير موجود",
+        open_product: "فتح المنتج"
+      },
+      en: {
+        catalog_title: "Products",
+        search_ph: "Search product...",
+        main_all: "Main section (All)",
+        sub_all: "Sub section (All)",
+        clear_filters: "Clear filters",
+        camera_btn: "📷 Camera",
+        price: "Price",
+        currency: "KD",
+        count: "Products",
+        scan_title: "Scan Product Barcode",
+        scan_hint: "Point the camera at the barcode. Product page will open automatically.",
+        scan_note: "If it doesn't scan fast, increase light or move closer.",
+        close: "Close",
+        not_found: "Product not found",
+        open_product: "Open product"
+      }
+    };
+
+    let lang = localStorage.getItem("lang") || "ar";
+    const langToggle = document.getElementById("langToggle");
+
+    function applyLang(){
+      document.documentElement.lang = lang;
+      document.documentElement.dir = (lang === "ar") ? "rtl" : "ltr";
+      langToggle.textContent = (lang === "ar") ? "EN" : "AR";
+
+      document.querySelectorAll("[data-i18n]").forEach(el=>{
+        const k = el.getAttribute("data-i18n");
+        if (dict[lang][k]) el.textContent = dict[lang][k];
+      });
+      document.querySelectorAll("[data-i18n-ph]").forEach(el=>{
+        const k = el.getAttribute("data-i18n-ph");
+        if (dict[lang][k]) el.setAttribute("placeholder", dict[lang][k]);
+      });
+    }
+
+    langToggle.addEventListener("click", ()=>{
+      lang = (lang === "ar") ? "en" : "ar";
+      localStorage.setItem("lang", lang);
+      applyLang();
+      render();
+      rebuildSelects(); // update placeholders
+    });
+
+    applyLang();
+
+    // ===== UI refs =====
+    const grid = document.getElementById("grid");
+    const status = document.getElementById("status");
+    const search = document.getElementById("search");
+    const filterMain = document.getElementById("filterMain");
+    const filterSub = document.getElementById("filterSub");
+    const btnClear = document.getElementById("btnClear");
+
+    const scanModal = document.getElementById("scanModal");
+    const btnScan = document.getElementById("btnScan");
+    const btnCloseScan = document.getElementById("btnCloseScan");
+
+    // ===== data =====
+    let items = [];
+    let html5Qr = null;
+    let metaCache = { mainSections: [], subSections: [] };
+
+    const metaRef = (name)=> doc(db, "meta", name);
+    async function loadMeta(){
+      const [mSnap, sSnap] = await Promise.all([
+        getDoc(metaRef("mainSections")),
+        getDoc(metaRef("subSections"))
+      ]);
+      metaCache.mainSections = mSnap.exists() ? (mSnap.data().items || []) : [];
+      metaCache.subSections = sSnap.exists() ? (sSnap.data().items || []) : [];
+    }
+
+    function fillSelect(select, itemsList, phText){
+      const current = select.value;
+      select.innerHTML = "";
+      const ph = document.createElement("option");
+      ph.value = "";
+      ph.textContent = phText;
+      select.appendChild(ph);
+
+      itemsList.forEach(v=>{
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v;
+        select.appendChild(o);
+      });
+
+      // keep current if possible
+      if ([...select.options].some(o=>o.value===current)) select.value = current;
+      else select.value = "";
+    }
+
+    function rebuildSelects(){
+      fillSelect(filterMain, metaCache.mainSections, dict[lang].main_all);
+
+      // sub section should depend on selected main (optional: filter it by products)
+      const base = filterMain.value
+        ? items.filter(p => p.mainSection === filterMain.value).map(p=>p.subSection).filter(Boolean)
+        : items.map(p=>p.subSection).filter(Boolean);
+
+      const uniq = [...new Set(base)].sort((a,b)=>a.localeCompare(b, "ar"));
+      fillSelect(filterSub, uniq.length ? uniq : metaCache.subSections, dict[lang].sub_all);
+    }
+
+    function applyFilters(){
+      const q = (search.value||"").trim().toLowerCase();
+      const main = filterMain.value;
+      const sub = filterSub.value;
+
+      let out = items.slice();
+      if (q) {
+        out = out.filter(p =>
+          (p.nameAr||"").toLowerCase().includes(q) ||
+          (p.nameEn||"").toLowerCase().includes(q)
+        );
+      }
+      if (main) out = out.filter(p => p.mainSection === main);
+      if (sub) out = out.filter(p => p.subSection === sub);
+
+      return out;
+    }
+
+    function productName(p){
+      return lang === "ar" ? (p.nameAr || "") : (p.nameEn || "");
+    }
+
+    function render(){
+      const out = applyFilters();
+      status.textContent = `${dict[lang].count}: ${out.length}`;
+
+      grid.innerHTML = "";
+      out.forEach(p=>{
+        const a = document.createElement("a");
+        a.href = `product.html?id=${encodeURIComponent(p.id)}`;
+        a.className = "block rounded-2xl border bg-white overflow-hidden hover:shadow-md transition";
+
+        const priceLine = `${dict[lang].price}: ${p.price || ""} ${dict[lang].currency}`;
+
+        a.innerHTML = `
+          <div class="aspect-square bg-slate-100">
+            <img src="${p.imageUrl||""}" class="w-full h-full object-cover" alt="">
+          </div>
+          <div class="p-3">
+            <div class="font-semibold line-clamp-2">${productName(p)}</div>
+            <div class="text-xs text-slate-500 mt-1">${lang==="ar" ? (p.nameEn||"") : (p.nameAr||"")}</div>
+            <div class="mt-2 text-sm">${priceLine}</div>
+          </div>
+        `;
+        grid.appendChild(a);
+      });
+
+      rebuildSelects();
+    }
+
+    // Live products
+    const productsCol = collection(db, "products");
+    const qRef = query(productsCol, orderBy("createdAt", "desc"));
+
+    await loadMeta();
+
+    onSnapshot(qRef, (snap)=>{
+      items = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      render();
+    });
+
+    [search, filterMain, filterSub].forEach(el=>{
+      el.addEventListener("input", render);
+      el.addEventListener("change", render);
+    });
+
+    btnClear.addEventListener("click", ()=>{
+      search.value = "";
+      filterMain.value = "";
+      filterSub.value = "";
+      render();
+    });
+
+    // ===== Scanner =====
+    function openScan(){
+      scanModal.classList.remove("hidden");
+      scanModal.classList.add("flex");
+
+      // (re)create reader container
+      document.getElementById("reader").innerHTML = "";
+
+      html5Qr = new Html5Qrcode("reader");
+      html5Qr.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 300, height: 160 } },
+        (decodedText) => {
+          // We used Firestore doc id as barcodeValue
+          window.location.href = `product.html?id=${encodeURIComponent(decodedText)}`;
+        },
+        () => {}
+      ).catch(err=>{
+        alert((lang==="ar" ? "تعذر فتح الكاميرا: " : "Camera error: ") + err);
+      });
+    }
+
+    async function closeScan(){
+      scanModal.classList.add("hidden");
+      scanModal.classList.remove("flex");
+
+      try {
+        if (html5Qr) { await html5Qr.stop(); await html5Qr.clear(); }
+      } catch {}
+      html5Qr = null;
+      document.getElementById("reader").innerHTML = "";
+    }
+
+    btnScan.addEventListener("click", openScan);
+    btnCloseScan.addEventListener("click", closeScan);
+    scanModal.addEventListener("click", (e)=>{ if(e.target===scanModal) closeScan(); });
+
+  </script>
+</body>
+</html>
