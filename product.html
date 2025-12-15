@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title data-i18n="product_title">تفاصيل المنتج</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    .amt-dv { display:flex; justify-content:space-between; gap:14px; }
+    .amt { white-space:nowrap; }
+    .dv { white-space:nowrap; min-width: 54px; text-align:left; }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-40 bg-white border-b">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center gap-2">
+      <button id="btnBack" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50" data-i18n="back">← رجوع</button>
+      <a href="catalog.html" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50" data-i18n="home">الصفحة الرئيسية</a>
+
+      <div class="ms-auto flex items-center gap-2">
+        <button id="langToggle" class="px-3 py-2 rounded-lg border bg-white hover:bg-slate-50">EN</button>
+        <div class="text-sm text-slate-500" id="crumb"></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <div id="wrap" class="grid grid-cols-1 md:grid-cols-2 gap-5"></div>
+
+    <section class="mt-8">
+      <h2 class="text-lg font-bold mb-3" data-i18n="related">منتجات مقترحة</h2>
+      <div id="relatedGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      getFirestore, doc, getDoc, collection, query, orderBy, onSnapshot
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAcIwwapktH2nxyZczVKFacTrLh1o-EgdM",
+      authDomain: "shakkak-8f90f.firebaseapp.com",
+      databaseURL: "https://shakkak-8f90f-default-rtdb.firebaseio.com",
+      projectId: "shakkak-8f90f",
+      storageBucket: "shakkak-8f90f.firebasestorage.app",
+      messagingSenderId: "1039276785290",
+      appId: "1:1039276785290:web:9523f9e1ddf7db7410f773",
+      measurementId: "G-XFGQ90337E"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ===== i18n =====
+    const dict = {
+      ar: {
+        product_title: "تفاصيل المنتج",
+        back: "← رجوع",
+        home: "الصفحة الرئيسية",
+        related: "منتجات مقترحة",
+        price: "السعر",
+        currency: "KD",
+        category: "كاتيجوري",
+        section: "القسم",
+        ingredients_ar: "المكونات (عربي)",
+        ingredients_en: "Ingredients (English)",
+        nutrition: "القيم الغذائية",
+        amount_per: "Amount per",
+        calories: "السعرات",
+        from_fat: "من الدهون",
+        total_fat: "دهون",
+        sat_fat: "دهون مشبعة",
+        trans_fat: "دهون مهدرجة",
+        cholesterol: "كوليسترول",
+        sodium: "صوديوم",
+        carbs: "كاربوهيدرات",
+        fiber: "الألياف الغذائية",
+        protein: "بروتين",
+        sugars: "إجمالي السكريات",
+        added_sugar: "سكر مضاف",
+        minerals: "المعادن والفيتامينات (DV%)",
+        dv_note_ar: "* تستند النسبة المئوية للقيم اليومية على نظام غذائي يحتوي على 2000 سعرة حرارية، قد تكون قيمك اليومية أعلى أو أقل حسب احتياجاتك من السعرات الحرارية.",
+        dv_note_en: "* Per cent Daily Values are based on 2000 calorie diet. Your Daily Values may be higher or lower depending on your calorie needs.",
+        not_found: "المنتج غير موجود"
+      },
+      en: {
+        product_title: "Product Details",
+        back: "← Back",
+        home: "Home",
+        related: "Related products",
+        price: "Price",
+        currency: "KD",
+        category: "Category",
+        section: "Section",
+        ingredients_ar: "Ingredients (Arabic)",
+        ingredients_en: "Ingredients (English)",
+        nutrition: "Nutrition Facts",
+        amount_per: "Amount per",
+        calories: "Calories",
+        from_fat: "From Fat",
+        total_fat: "Total Fat",
+        sat_fat: "Saturated Fat",
+        trans_fat: "Trans Fat",
+        cholesterol: "Cholesterol",
+        sodium: "Sodium",
+        carbs: "Total Carbohydrates",
+        fiber: "Dietary Fiber",
+        protein: "Protein",
+        sugars: "Total Sugars",
+        added_sugar: "Added Sugar",
+        minerals: "Minerals & Vitamins (DV%)",
+        dv_note_ar: "* Percent Daily Values are based on a 2000 calorie diet.",
+        dv_note_en: "* Per cent Daily Values are based on 2000 calorie diet. Your Daily Values may be higher or lower depending on your calorie needs.",
+        not_found: "Product not found"
+      }
+    };
+
+    let lang = localStorage.getItem("lang") || "ar";
+    const langToggle = document.getElementById("langToggle");
+
+    function applyLang(){
+      document.documentElement.lang = lang;
+      document.documentElement.dir = (lang === "ar") ? "rtl" : "ltr";
+      langToggle.textContent = (lang === "ar") ? "EN" : "AR";
+
+      document.querySelectorAll("[data-i18n]").forEach(el=>{
+        const k = el.getAttribute("data-i18n");
+        if (dict[lang][k]) el.textContent = dict[lang][k];
+      });
+    }
+
+    langToggle.addEventListener("click", ()=>{
+      lang = (lang === "ar") ? "en" : "ar";
+      localStorage.setItem("lang", lang);
+      applyLang();
+      // re-render from cached product
+      if (window.__product) renderProduct(window.__product);
+      if (window.__all) renderRelated(window.__product, window.__all);
+    });
+
+    applyLang();
+
+    // ===== UI =====
+    const wrap = document.getElementById("wrap");
+    const relatedGrid = document.getElementById("relatedGrid");
+    const crumb = document.getElementById("crumb");
+
+    document.getElementById("btnBack").addEventListener("click", ()=> history.back());
+
+    const params = new URLSearchParams(location.search);
+    const id = params.get("id");
+
+    function esc(s){ return (s ?? "").toString(); }
+    function pname(p){ return lang === "ar" ? (p.nameAr||"") : (p.nameEn||""); }
+    function otherName(p){ return lang === "ar" ? (p.nameEn||"") : (p.nameAr||""); }
+
+    function dvCell(amount, unit, dv){
+      const a = esc(amount);
+      const d = esc(dv);
+      return `<div class="amt-dv"><span class="amt">${a} ${unit}</span><span class="dv">DV% ${d}</span></div>`;
+    }
+
+    function renderProduct(p){
+      window.__product = p;
+
+      crumb.textContent = `${p.mainSection||""} / ${p.subSection||""}`;
+
+      wrap.innerHTML = `
+        <div class="rounded-2xl border bg-white overflow-hidden">
+          <div class="aspect-square bg-slate-100">
+            <img src="${esc(p.imageUrl)}" class="w-full h-full object-cover" alt="">
+          </div>
+          <div class="p-4">
+            <div class="text-2xl font-bold">${pname(p)}</div>
+            <div class="text-sm text-slate-500 mt-1">${esc(otherName(p))}</div>
+
+            <div class="mt-3 text-sm">
+              <span class="font-semibold">${dict[lang].price}:</span> ${esc(p.price)} ${dict[lang].currency}
+              <span class="mx-2">|</span>
+              <span class="font-semibold">${dict[lang].category}:</span> ${esc(p.dietCategory)}
+            </div>
+
+            <div class="mt-2 text-sm">
+              <span class="font-semibold">${dict[lang].section}:</span> ${esc(p.mainSection)} / ${esc(p.subSection)}
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div class="rounded-2xl border bg-white p-4">
+            <div class="font-bold mb-2">${dict[lang].ingredients_ar}</div>
+            <div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(p.ingredientsAr)}</div>
+          </div>
+
+          <div class="rounded-2xl border bg-white p-4" dir="ltr">
+            <div class="font-bold mb-2">${dict[lang].ingredients_en}</div>
+            <div class="text-sm text-slate-700 whitespace-pre-wrap">${esc(p.ingredientsEn)}</div>
+          </div>
+
+          <div class="rounded-2xl border bg-white p-4">
+            <div class="font-bold mb-2">${dict[lang].nutrition}</div>
+
+            <table class="w-full text-sm border rounded-xl overflow-hidden">
+              <tbody class="divide-y">
+                <tr class="bg-slate-50">
+                  <td class="p-2 font-semibold w-56">${dict[lang].amount_per}</td>
+                  <td class="p-2">${esc(p.nutrition?.amountPerG)} g</td>
+                </tr>
+
+                <tr>
+                  <td class="p-2 font-semibold">${dict[lang].calories}</td>
+                  <td class="p-2">${esc(p.nutrition?.calories)} kcal</td>
+                </tr>
+                <tr>
+                  <td class="p-2 font-semibold">${dict[lang].from_fat}</td>
+                  <td class="p-2">${esc(p.nutrition?.fromFat)} kcal</td>
+                </tr>
+
+                <tr class="bg-slate-50">
+                  <td class="p-2 font-semibold">${dict[lang].total_fat}</td>
+                  <td class="p-2">${dvCell(p.nutrition?.totalFatAmt, "g", p.nutrition?.totalFatDv)}</td>
+                </tr>
+
+                <tr>
+                  <td class="p-2 font-semibold">${dict[lang].sat_fat}</td>
+                  <td class="p-2">${dvCell(p.nutrition?.satFatAmt, "g", p.nutrition?.satFatDv)}</td>
+                </tr>
+
+                <tr>
+                  <td class="p-2 font-semibold">${dict[lang].trans_fat}</td>
+                  <td class="p-2">${esc(p.nutrition?.transFatAmt)} g</td>
+                </tr>
+
+                <tr class="bg-slate-50">
+                  <td class="p-2 font-semibold">${dict[lang].cholesterol}</td>
+                  <td class="p-2">${dvCell(p.nutrition?.cholAmt, "mg", p.nutrition?.cholDv)}</td>
+                </tr>
+
+                <tr>
+                  <td class="p-2 font-semibold">${dict[lang].sodium}</td>
+                  <td class="p-2">${dvCell(p.nutrition?.sodAmt, "mg", p.nutrition?.sodDv)}</td>
+                </tr>
+
+                <tr class="bg-slate-50">
+                  <td class="p-2 font-semibold">${dict[lang].carbs}</td>
+                  <td class="p-2">${dvCell(p.nutrition?.carbAmt, "g", p.nutrition?.carbDv)}</td>
+                </tr>
+
+                <tr>
+                  <td class="p-2 font-semibold">${dict[lang].fiber}</td>
+                  <td class="p-2">${dvCell(p.nutrition?.fiberAmt, "g", p.nutrition?.fiberDv)}</td>
+                </tr>
+
+                <tr>
+                  <td class="p-2 font-semibold">${dict[lang].protein}</td>
+                  <td class="p-2">${dvCell(p.nutrition?.proteinAmt, "g", p.nutrition?.proteinDv)}</td>
+                </tr>
+
+                <tr class="bg-slate-50">
+                  <td class="p-2 font-semibold">${dict[lang].sugars}</td>
+                  <td class="p-2">${esc(p.nutrition?.sugarAmt)} g</td>
+                </tr>
+
+                <tr>
+                  <td class="p-2 font-semibold">${dict[lang].added_sugar}</td>
+                  <td class="p-2">${esc(p.nutrition?.addedSugarAmt)} g</td>
+                </tr>
+
+                <tr class="bg-slate-50">
+                  <td class="p-2 font-semibold">${dict[lang].minerals}</td>
+                  <td class="p-2">
+                    Calcium ${esc(p.nutrition?.calciumDv)}% —
+                    Iron ${esc(p.nutrition?.ironDv)}% —
+                    Potassium ${esc(p.nutrition?.potassiumDv)}% —
+                    Vitamin D ${esc(p.nutrition?.vitdDv)}%
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="mt-3 text-xs text-slate-600 space-y-1">
+              <div>${dict[lang].dv_note_ar}</div>
+              <div dir="ltr">${dict[lang].dv_note_en}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderRelated(current, all){
+      const others = all.filter(x => x.id !== current.id);
+
+      const sameSub = others.filter(x => x.subSection && x.subSection === current.subSection);
+      const sameMain = others.filter(x => x.mainSection && x.mainSection === current.mainSection);
+
+      const pool = (sameSub.length ? sameSub : sameMain).slice(0, 10);
+
+      relatedGrid.innerHTML = "";
+      pool.forEach(x=>{
+        const a = document.createElement("a");
+        a.href = `product.html?id=${encodeURIComponent(x.id)}`;
+        a.className = "block rounded-2xl border bg-white overflow-hidden hover:shadow-md transition";
+
+        a.innerHTML = `
+          <div class="aspect-square bg-slate-100">
+            <img src="${esc(x.imageUrl)}" class="w-full h-full object-cover" alt="">
+          </div>
+          <div class="p-2">
+            <div class="text-sm font-semibold line-clamp-2">${lang === "ar" ? (x.nameAr||"") : (x.nameEn||"")}</div>
+            <div class="text-xs text-slate-500 mt-1">${esc(x.price)} ${dict[lang].currency}</div>
+          </div>
+        `;
+        relatedGrid.appendChild(a);
+      });
+    }
+
+    async function load(){
+      if(!id){
+        wrap.innerHTML = `<div class="p-4 bg-white border rounded-2xl">${dict[lang].not_found}</div>`;
+        return;
+      }
+
+      const ref = doc(db, "products", id);
+      const snap = await getDoc(ref);
+      if(!snap.exists()){
+        wrap.innerHTML = `<div class="p-4 bg-white border rounded-2xl">${dict[lang].not_found}</div>`;
+        return;
+      }
+
+      const product = { id: snap.id, ...snap.data() };
+      renderProduct(product);
+
+      // Related: subscribe to all products
+      const productsCol = collection(db, "products");
+      const qRef = query(productsCol, orderBy("createdAt", "desc"));
+      onSnapshot(qRef, (snap2)=>{
+        const all = snap2.docs.map(d=>({ id:d.id, ...d.data() }));
+        window.__all = all;
+        renderRelated(product, all);
+      });
+    }
+
+    load();
+  </script>
+</body>
+</html>
